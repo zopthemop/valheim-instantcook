@@ -1,0 +1,7 @@
+{
+  "name": "Instantcook",
+  "description": "Cooking finishes in about a second but still burns at the regular speed",
+  "version_number": "1.0.0",
+  "dependencies": [],
+  "website_url": "https://github.com/zopthemop/valheim-instantcook"
+}

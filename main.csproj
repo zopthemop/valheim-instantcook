@@ -1,0 +1,135 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net472</TargetFramework>
+    <AssemblyName>InstantCook</AssemblyName>
+    <RootNamespace>InstantCook</RootNamespace>
+    <LangVersion>latest</LangVersion>
+    <Nullable>disable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Reference Include="BepInEx">
+      <HintPath>C:\Games\Steam\steamapps\common\Valheim\BepInEx\core\BepInEx.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+
+    <Reference Include="0Harmony">
+      <HintPath>C:\Games\Steam\steamapps\common\Valheim\BepInEx\core\0Harmony.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+
+    <Reference Include="assembly_valheim">
+      <HintPath>C:\Games\Steam\steamapps\common\Valheim\valheim_Data\Managed\assembly_valheim.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+
+    <Reference Include="UnityEngine">
+      <HintPath>C:\Games\Steam\steamapps\common\Valheim\valheim_Data\Managed\UnityEngine.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+
+    <Reference Include="UnityEngine.CoreModule">
+      <HintPath>C:\Games\Steam\steamapps\common\Valheim\valheim_Data\Managed\UnityEngine.CoreModule.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+  </ItemGroup>
+
+  <Target Name="CopyDllToProjectDir" AfterTargets="Build">
+    <Copy SourceFiles="$(TargetPath)"
+      DestinationFolder="$(MSBuildProjectDirectory)" />
+  </Target>
+
+  <UsingTask
+      TaskName="GenerateModManifest"
+      TaskFactory="RoslynCodeTaskFactory"
+      AssemblyName="Microsoft.Build.Tasks.Core">
+    <Task>
+      <Using Namespace="System" />
+      <Using Namespace="System.IO" />
+      <Using Namespace="System.Text" />
+      <Using Namespace="System.Text.RegularExpressions" />
+      <Code Type="Fragment" Language="C#">
+        <![CDATA[
+		var text = File.ReadAllText("main.cs");
+
+		var nameMatch = Regex.Match(
+			text,
+			@"public\s+const\s+string\s+ModName\s*=\s*""([^""]+)""",
+			RegexOptions.Multiline);
+
+		var versionMatch = Regex.Match(
+			text,
+			@"public\s+const\s+string\s+ModVersion\s*=\s*""([^""]+)""",
+			RegexOptions.Multiline);
+
+		var descriptionMatch = Regex.Match(
+			text,
+			@"public\s+const\s+string\s+ModDescription\s*=\s*""([^""]+)""",
+			RegexOptions.Multiline);
+
+		var rawName = nameMatch.Groups[1].Value;
+
+		// name: ModName with spaces removed, only [a-zA-Z0-9_]
+		var noSpaces = Regex.Replace(rawName, @"\s+", "");
+		var safeName = Regex.Replace(noSpaces, @"[^A-Za-z0-9_]", "");
+
+		var version = versionMatch.Groups[1].Value;
+		var description = descriptionMatch.Groups[1].Value;
+
+		var slug = safeName.ToLowerInvariant();
+		var website = $"https://github.com/zopthemop/valheim-{slug}";
+
+		// Build JSON
+		Func<string,string> JsonEscape = s => s
+			.Replace("\\", "\\\\")
+			.Replace("\"", "\\\"");
+
+		var sb = new StringBuilder();
+		sb.AppendLine("{");
+		sb.AppendLine($"  \"name\": \"{JsonEscape(safeName)}\",");
+		sb.AppendLine($"  \"description\": \"{JsonEscape(description)}\",");
+		sb.AppendLine($"  \"version_number\": \"{JsonEscape(version)}\",");
+		sb.AppendLine($"  \"dependencies\": [],");
+		sb.AppendLine($"  \"website_url\": \"{JsonEscape(website)}\"");
+		sb.AppendLine("}");
+
+		File.WriteAllText("manifest.json", sb.ToString(), new UTF8Encoding(encoderShouldEmitUTF8Identifier:false));
+
+		Log.LogMessage(MessageImportance.High, $"Generated manifest.json");
+        ]]>
+      </Code>
+    </Task>
+  </UsingTask>
+
+  <Target Name="GenerateManifestFromMain" BeforeTargets="BeforeBuild">
+    <GenerateModManifest />
+    <ItemGroup>
+      <None Include="manifest.json">
+        <Link>manifest.json</Link>
+        <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+        <CopyToPublishDirectory>Always</CopyToPublishDirectory>
+      </None>
+    </ItemGroup>
+  </Target>
+
+  <Target Name="PackageSelectedArtifacts" AfterTargets="Build">
+    <PropertyGroup>
+      <ZipStagingDir>$(IntermediateOutputPath)ZipStaging\</ZipStagingDir>
+    </PropertyGroup>
+
+    <ItemGroup>
+      <ArtifactsToZip Include="$(AssemblyName).dll" />
+      <ArtifactsToZip Include="manifest.json" />
+      <ArtifactsToZip Include="README.md" />
+      <ArtifactsToZip Include="icon.png" />
+    </ItemGroup>
+
+    <MakeDir Directories="$(ZipStagingDir)" />
+    <Copy SourceFiles="@(ArtifactsToZip)" DestinationFolder="$(ZipStagingDir)" />
+    <ZipDirectory SourceDirectory="$(ZipStagingDir)" DestinationFile="$(AssemblyName).zip" Overwrite="true" />
+    <RemoveDir Directories="$(ZipStagingDir)" />
+
+    <Message Text="Created $(ZipFile)" Importance="High" />
+  </Target>
+</Project>
